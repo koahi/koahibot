@@ -31,6 +31,61 @@ client.on("guildDelete", guild => {
   client.user.setActivity(`Serving ${client.guilds.size} servers`);
 });
 
+let recentList = [];
+let userList = [];
+
+//let chanceToWin = 90; //% chance to gain koahibux
+let rateLimit = 3; //Minutes before user can gain koahibux again
+
+setInterval(reduceTime, 60*1000); //1 minute interval
+
+function reduceTime(){
+  for(var key in recentList){
+    if(recentList[key] > 0){
+      recentList[key] -= 1;
+    }
+  }
+  console.log("TIMER ACTIVATED RECENT LIST: ");
+  console.log(recentList);
+}
+
+function readWallet(){
+  var fs = require('fs');
+  fs.readFile('../koahibot/koahibux/wallet.json', function(err,content){
+    if(err){
+      throw err;
+    }
+    return JSON.parse(content);
+  });
+}
+
+function writeWallet(userID, money){
+
+  var fs = require('fs');
+  fs.readFile('../koahibot/koahibux/wallet.json', function(err,content){
+    if(err){
+      throw err;
+    }
+    wallet = JSON.parse(content);
+
+    if(userID in wallet){
+      wallet[userID] += money;
+    }
+    else{
+      wallet[userID] = money;
+    }
+
+    fs.writeFile('../koahibot/koahibux/wallet.json', JSON.stringify(wallet), function(err){
+      if(err){
+        throw err;
+      }
+    });
+  });
+}
+
+//var fs = require("fs");
+//var walletFile = '/koahibux/wallet.txt';
+
 
 client.on("message", async message => {
   // This event will run on every single message received, from any channel or DM.
@@ -41,7 +96,7 @@ client.on("message", async message => {
   
   // Also good practice to ignore any message that does not start with our prefix, 
   // which is set in the configuration file.
-  if(message.content.indexOf(config.prefix) !== 0) return;
+  //if(message.content.indexOf(config.prefix) !== 0) return;
   
   // Here we separate our "command" name, and our "arguments" for the command. 
   // e.g. if we have the message "+say Is this the real life?" , we'll get the following:
@@ -50,16 +105,142 @@ client.on("message", async message => {
   const args = message.content.slice(config.prefix.length).trim().split(/ +/g);
   const command = args.shift().toLowerCase();
 
+  //
+  //KOAHIBUX
+  //  
+
+  let userID = message.member.user.id;
+  let userName = message.member.user.username;
+
+  //console.log(message.member.user);
+  //console.log("MESSAGE: " + message.content);
+
+  if(message.content.length >= 5 && message.content.substring(0,1) != "!") {
+
+    console.log("USER: " + userID);
+    if (!(userID in recentList) || recentList[userID] == 0){
+
+
+      let chance = Math.floor((Math.random() * 1000) + 1);
+      console.log("CHANCE: " + chance);
+      if (chance <= 10){
+        let money = Math.floor((Math.random() * 5) + 1);
+        recentList[userID] = rateLimit;
+        writeWallet(userID, money);
+        message.channel.send("```" + userName + " has earned " + money + " koahibux!```");
+      }
+      else if (chance <= 40){
+        let money = Math.floor((Math.random() * 2) + 1);
+        recentList[userID] = rateLimit;
+        writeWallet(userID, money);
+        message.channel.send("```" + userName + " has earned " + money + " koahibux!```");
+      }
+      else if (chance <= 200){
+        let money = Math.floor((Math.random() * 10) + 1)/100;
+        recentList[userID] = rateLimit;
+        writeWallet(userID, money);
+        message.channel.send("```" + userName + " has earned " + money + " koahibux!```");
+      }
+    }
+  }
+
+  if(command === "wallet") {
+    let userBalance = 0;
+    var fs = require('fs');
+    fs.readFile('../koahibot/koahibux/wallet.json', function(err,content){
+      if(err){
+        throw err;
+      }
+      let wallet = JSON.parse(content);
+      if (userID in wallet){
+        userBalance = wallet[userID].toFixed(2);
+      }
+      message.channel.send("```" + userName + " currently has " + userBalance + " koahibux!```");
+    });
+  }
+
+
+  if(command === "tip") {
+    let senderID = userID;
+    let senderName = message.member.user.username;
+
+    let receiver = message.mentions.members.first();
+    if ( receiver ){
+      let receiverID = receiver.user.id;
+      let receiverName = receiver.user.username;
+
+      let balance = parseFloat(args[1]).toFixed(2);
+      let transferBalance = parseFloat(balance);
+      console.log(senderID + " is transferring " + transferBalance + " koahibux to " + receiverID);
+      console.log(typeof transferBalance);
+      if (senderID && receiverID && (typeof transferBalance == 'number')){
+        console.log("Passes all checks!");
+        var fs = require('fs');
+        fs.readFile('../koahibot/koahibux/wallet.json', function(err,content){
+          if(err){
+            throw err;
+          }
+          let wallet = JSON.parse(content);
+          senderBalance = wallet[senderID];
+          receiverBalance = wallet[receiverID];
+
+          if (senderBalance < transferBalance){
+            message.channel.send("```" + userName + " does not have enough koahibux to complete this transaction!```");
+          }
+          else if (senderBalance >= transferBalance){
+            wallet[senderID] -= transferBalance;
+            if (receiverID in wallet){
+              wallet[receiverID] += transferBalance;
+            }
+            else if (!(receiverID in wallet)){
+              wallet[receiverID] = transferBalance;
+            }
+              fs.writeFile('../koahibot/koahibux/wallet.json', JSON.stringify(wallet), function(err){
+                if(err){
+                  throw err;
+                }
+              });
+            message.channel.send(senderName + " has given " + receiverName + " " + transferBalance + " koahibux!");
+          }
+        });
+      }
+    }
+    else if ( !receiver ){
+      message.channel.send("```Please enter a valid user. (Use tab complete)```");
+    }
+
+  }
+
+
+
+  //
+  //PRESTIGE COLOR
+  //BOT COMMANDS
+  //
+
   // Fills color roles array
   let colorRolesArray = [];
 
-  let colorNamesArray = [ 'coral',
+  let colorNamesArray = [ 'aquamarine',
+                          'blue',
+                          'coral',
+                          'crimson',
                           'cyan',
+                          'deeppink',
                           'green',
+                          'ivory',
+                          'khaki',
                           'lime',
                           'maroon',
                           'magenta',
+                          'mistyrose',
                           'orange',
+                          'purple',
+                          'red',
+                          'salmon',
+                          'seagreen',
+                          'teal',
+                          'turquoise',
                           'violet',
                           'yellow'];
 
@@ -75,15 +256,6 @@ client.on("message", async message => {
     return tempRole;
   };
   
-  // Let's go with a few common example commands! Feel free to delete or change those.
-  
-  if(command === "test1") {
-    // Calculates ping between sending a message and editing it, giving a nice round-trip latency.
-    // The second ping is an average latency between the bot and the websocket server (one-way, not round-trip)
-    const m = await message.channel.send("Ping?");
-    m.edit(`Pong! Latency is ${m.createdTimestamp - message.createdTimestamp}ms. API Latency is ${Math.round(client.ping)}ms`);
-  }
-
   if(command === "prestige") {
     let testUser = message.member;
 
